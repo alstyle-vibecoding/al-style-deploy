@@ -93,7 +93,9 @@ grep -q '^name: al-style-deploy$' "$stage/skill/SKILL.md" || fail 'Unexpected sk
 printf '%s\n' "$repository" "$revision" > "$stage/skill/.github-source"
 chmod 700 "$stage/skill/scripts/"*.sh
 if [ -e "$destination" ]; then
-    backup="$parent/.al-style-deploy-backup-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    backup_root="$(dirname "$parent")/.al-style-deploy-backups"
+    mkdir -p "$backup_root"
+    backup="$backup_root/al-style-deploy-$(date -u +%Y%m%dT%H%M%SZ)-$$"
     mv "$destination" "$backup"
 fi
 mv "$stage/skill" "$destination"

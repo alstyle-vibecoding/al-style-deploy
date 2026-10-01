@@ -73,7 +73,9 @@ function Install-AlStyleSkill([string]$SelectedAgent, [string]$Target, [string]$
         }
         [IO.File]::WriteAllText((Join-Path $skill '.github-source'), "$AlStyleRepository`n$Revision`n", [Text.UTF8Encoding]::new($false))
         if (Test-Path -LiteralPath $Target) {
-            $backup = Join-Path $parent ('.al-style-deploy-backup-' + [Guid]::NewGuid().ToString('N'))
+            $backupRoot = Join-Path ([IO.Path]::GetDirectoryName($parent)) '.al-style-deploy-backups'
+            [IO.Directory]::CreateDirectory($backupRoot) | Out-Null
+            $backup = Join-Path $backupRoot ('al-style-deploy-' + [Guid]::NewGuid().ToString('N'))
             [IO.Directory]::Move($Target, $backup)
         }
         [IO.Directory]::Move($skill, $Target)

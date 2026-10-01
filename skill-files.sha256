@@ -2,10 +2,10 @@
 b5ce60af0b7a081e7d59f73beac9977d06ceb7d847d17647f77ba04390797601  skills/al-style-deploy/assets/static.Dockerfile
 e5645835cd247ad9fc3ed005311684b8000871972a75c506acfac891147ef94a  skills/al-style-deploy/assets/toolchain.conf
 a4487a55d38a575dda10727a2d69e70dd3b6d9f88f68fe5c2d520ff0cf155d15  skills/al-style-deploy/references/contract.md
-1f565bf1b31ba160c5dc4cfd996a2333435e4e86ecc9ed6a9a28c0510ec6e7d2  skills/al-style-deploy/references/install.md
+e16b2bb193e1c981b6506656970129d213deb8f709d94a75a5891cc631c8e87b  skills/al-style-deploy/references/install.md
 2c15bddbebcc6e4f789d686557625beb69524e41296ab872b12f7a25b27469da  skills/al-style-deploy/references/setup.md
 f4d69e43efebceca0ac3100f4f038687c4d0831cf879d4b69ea73ab11d1a69d6  skills/al-style-deploy/scripts/alstyle.py
-3808d5338b8625f4c99fd57fabb2409c6cb7c74c436413ad05e325a89657bc89  skills/al-style-deploy/scripts/install-from-github.ps1
-36351de211a1c9214666ff02a1355d4dce321d0dcb7123cb4e835898a17a663a  skills/al-style-deploy/scripts/install-from-github.sh
+2c089a09b35367d4b7f256cb77ce8e28c7db71c06e97a8f51aa6b65ecf7b37d3  skills/al-style-deploy/scripts/install-from-github.ps1
+996f569dedc7eef54736d9a19fbd8e044a20606b7c3171f0f6bd4842fb18a6c6  skills/al-style-deploy/scripts/install-from-github.sh
 7921c36b197a0c3e46b575bbf750981c0e88adb03f7e153cd51c324b6a15bffb  skills/al-style-deploy/scripts/run.ps1
 697c1c6943625c9699e3b1ad0466ce7c39e09a8ccac1e620c3318dde64a86eb6  skills/al-style-deploy/scripts/run.sh
