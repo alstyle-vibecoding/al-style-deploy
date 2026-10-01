@@ -12,6 +12,7 @@ Save this JSON as `.alstyle/deploy.json`. Keys not in the contract are rejected 
       "dockerfile": "Dockerfile",
       "port": 3000,
       "public": true,
+      "test_stage": "tests",
       "health_path": "/health",
       "user": "10001:10001",
       "memory_mb": 256,
@@ -37,3 +38,15 @@ Current pilot quota: 768 MB RAM and 0.75 CPU per project, three projects per emp
 The admin block reports an existing admin URL. It does not provision a login by itself. Use the application's own administrator initialization, pass any bootstrap password as a secret, and verify login before reporting working administrator access.
 
 Runtime secret updates apply on the next publication. Releases snapshot encrypted runtime secrets for reliable configuration rollback. Existing database passwords remain stable. Rollback preserves data volumes and does not reverse database migrations.
+
+## Project name and public address
+
+New projects must declare a Dockerfile `test_stage` for every built service. The company runner builds that stage before the runtime image; a failing test stage blocks image publication. Put meaningful tests and their runner in the named stage, using only synthetic credentials. Do not rely on having test tools in the final production image.
+
+Use `stage-env --path <project> --source <project>/.env --names APP_SECRET,ADMIN_PASSWORD --move-source` to privately stage authorized existing values. It prints only variable names and the protected JSON path. Add each name to its service's `secrets` array and pass that private path to `publish --secrets-file <path>`; the client uploads ENV values before Git push. The source `.env` backup and staged JSON stay outside the project. Never pass credential values on command lines or make them Docker build arguments.
+
+Project identity is separate from the deployment manifest. First publication accepts `--name catalog` (repository slug), `--title "Каталог товаров"` (displayed in Coolify), and `--domain catalog` or the complete hostname under the suffix returned by `me`. Run `domains --label catalog` to check availability before creating the project. The final reservation is atomic across employees; a taken address returns a conflict without changing its owner.
+
+The chosen hostname belongs to the public `web` service, or the first public service when there is no public `web`. Additional public services retain separate gateway-assigned hostnames. Health checks, admin links and Coolify routing use the chosen address. Existing projects without a selected domain keep their previous generated URLs.
+
+This pilot allows 1-48 lowercase Latin letters/digits with single hyphens, starting with a letter. Addresses ending in a platform-style 12-character hexadecimal ID are reserved. External/custom domains cannot be assigned by employees: the operator must configure an approved suffix and DNS first. For a company wildcard, point `*.<approved-suffix>` to `89.126.193.220`, verify DNS, then set `ALSTYLE_DOMAIN_SUFFIX` and restart the gateway. Coordinate changes before any projects exist; changing the suffix for deployed projects requires a planned migration and DNS/TLS verification.
