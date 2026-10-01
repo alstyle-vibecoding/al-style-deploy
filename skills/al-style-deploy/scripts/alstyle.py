@@ -189,6 +189,29 @@ def mapping(root):
     return json.loads(path.read_text())
 
 
+def issue_invitation(client, email, name):
+    private = state_directory().expanduser().resolve() / "private"
+    if private.is_relative_to(pathlib.Path.cwd().resolve()):
+        raise RuntimeError("Invitation storage must be outside the current project")
+    private.mkdir(parents=True, exist_ok=True)
+    private.chmod(0o700)
+    directory = private / "invitations"
+    directory.mkdir(parents=True, exist_ok=True)
+    directory.chmod(0o700)
+    # Prepare writable private storage before creating a one-time credential remotely.
+    handle, temporary = tempfile.mkstemp(prefix="employee-", suffix=".txt", dir=directory)
+    path = pathlib.Path(temporary)
+    try:
+        os.fchmod(handle, 0o600)
+        with os.fdopen(handle, "w") as file:
+            result = client.request("POST", "/invitations", {"email": email, "name": name})
+            file.write(result["invite"] + "\n")
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+    return {"email": result["email"], "expires": result["expires"], "invitation_file": str(path)}
+
+
 def chosen_domain(value, suffix):
     # Accept a short label or the complete company-provided hostname, never arbitrary routes.
     value = value.strip().lower()
@@ -424,6 +447,9 @@ def main():
     subs.add_parser("logout")
     subs.add_parser("me")
     subs.add_parser("projects")
+    invite = subs.add_parser("invite", help="Issue an employee invitation using an approved operator account")
+    invite.add_argument("--email", required=True)
+    invite.add_argument("--name", required=True)
     domains = subs.add_parser("domains", help="Check a project's desired address before publishing")
     domains.add_argument("--label", required=True)
     stage = subs.add_parser(
@@ -504,7 +530,9 @@ def main():
         print(json.dumps({"scanned_files": len(scan(root)), "status": "passed"}))
         return
     client = Client(args.gateway)
-    if args.command == "login":
+    if args.command == "invite":
+        print(json.dumps(issue_invitation(client, args.email, args.name), ensure_ascii=False, indent=2))
+    elif args.command == "login":
         invite = getpass.getpass("Operator invitation: ")
         result = client.request("POST", "/auth/exchange", {"invite": invite}, auth=False)
         private_write(client.file, json.dumps({"url": client.url, "token": result["token"]}))

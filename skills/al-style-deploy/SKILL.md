@@ -1,6 +1,6 @@
 ---
 name: al-style-deploy
-description: Prepare the employee's computer, install missing Git and Python, and publish or update their web project in AL-STYLE private GitHub repositories and Coolify. Check deployment status and roll back releases. Use when the user asks to publish a company project or update its deployed version.
+description: Prepare the employee's computer, install missing Git and Python, and publish or update their web project in AL-STYLE private GitHub repositories and Coolify. Check deployment status, roll back releases, or issue employee invitations from an approved operator account.
 ---
 
 # AL-STYLE deployment
@@ -60,3 +60,9 @@ For runtime secrets, the user runs `secret-set --path <project> --name KEY` and 
 Use `history --path <project>` to find successful releases, then `rollback --path <project> --release <id>` when the user asks to undo a release. Rollback restores application images/configuration; database migrations and persisted data require their own recovery procedure. Do not describe an image rollback as a database restore.
 
 If publication fails, use `logs --path <project> --kind build` or `logs --path <project> --service <name>` to inspect the employee's own diagnostics, repair the concrete project/configuration error and publish a new commit. Authorization failures, operator connection requirements, quotas or an unresolved provider outage require operator help. Do not switch to personal repositories, shared credentials, arbitrary SSH commands or direct Coolify access to bypass them.
+
+## Issue employee invitations
+
+When Danil or Nikita asks to give an employee deployment access, use the current operator's own gateway login and check `me`. Only accounts with `can_invite: true` can issue invitations. If not signed in, follow the normal private login procedure; a Coolify login does not automatically sign in this client. Ask for the employee's email and name only if missing, then run `invite --email <employee-email> --name "<employee-name>"` through the same launcher. This action needs no project or GitHub account.
+
+The client saves the one-time invitation in a protected file outside the current project and prints only the recipient, expiry timestamp and file path. Link that local file for the operator to send directly to the intended employee; never read its contents into chat, publish it in a group, or send it elsewhere without explicit authorization. The invitation lasts 24 hours and is used once at login. New employees cannot issue invitations or access another employee's projects. The invitation endpoint cannot grant operator rights, recover an operator account or reactivate a disabled account; those tasks require the server operator.
