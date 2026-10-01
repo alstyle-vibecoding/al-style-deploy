@@ -58,13 +58,54 @@ def secret_literal(data):
     return False
 
 
+def private_permissions(path, directory=False):
+    if sys.platform != "win32":
+        path.chmod(0o700 if directory else 0o600)
+        return
+    # Windows chmod does not restrict readers. Replace the ACL with the current user's SID.
+    script = """
+$ErrorActionPreference = 'Stop'
+$owner = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+if ($env:ALSTYLE_PRIVATE_DIRECTORY -eq '1') {
+    $acl = [System.Security.AccessControl.DirectorySecurity]::new()
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+        $owner, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+} else {
+    $acl = [System.Security.AccessControl.FileSecurity]::new()
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($owner, 'FullControl', 'Allow')
+}
+$acl.SetOwner($owner)
+$acl.SetAccessRuleProtection($true, $false)
+$acl.SetAccessRule($rule)
+if ($env:ALSTYLE_PRIVATE_DIRECTORY -eq '1') {
+    [System.IO.Directory]::SetAccessControl($env:ALSTYLE_PRIVATE_PATH, $acl)
+} else {
+    [System.IO.File]::SetAccessControl($env:ALSTYLE_PRIVATE_PATH, $acl)
+}
+"""
+    executable = pathlib.Path(os.environ.get("SystemRoot", r"C:\Windows")) / (
+        "System32/WindowsPowerShell/v1.0/powershell.exe"
+    )
+    try:
+        result = subprocess.run(
+            [str(executable), "-NoProfile", "-NonInteractive", "-Command", script],
+            env={**os.environ, "ALSTYLE_PRIVATE_PATH": str(path),
+                 "ALSTYLE_PRIVATE_DIRECTORY": "1" if directory else "0"},
+            capture_output=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RuntimeError("Could not protect private storage on Windows") from None
+    if result.returncode:
+        raise RuntimeError("Could not protect private storage on Windows")
+
+
 def private_write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.parent.chmod(0o700)
+    private_permissions(path.parent, directory=True)
     handle, temporary = tempfile.mkstemp(dir=path.parent)
     try:
-        os.fchmod(handle, 0o600)
         with os.fdopen(handle, "w") as file:
+            private_permissions(pathlib.Path(temporary))
             file.write(content)
         os.replace(temporary, path)
     finally:
@@ -194,16 +235,16 @@ def issue_invitation(client, email, name):
     if private.is_relative_to(pathlib.Path.cwd().resolve()):
         raise RuntimeError("Invitation storage must be outside the current project")
     private.mkdir(parents=True, exist_ok=True)
-    private.chmod(0o700)
+    private_permissions(private, directory=True)
     directory = private / "invitations"
     directory.mkdir(parents=True, exist_ok=True)
-    directory.chmod(0o700)
+    private_permissions(directory, directory=True)
     # Prepare writable private storage before creating a one-time credential remotely.
     handle, temporary = tempfile.mkstemp(prefix="employee-", suffix=".txt", dir=directory)
     path = pathlib.Path(temporary)
     try:
-        os.fchmod(handle, 0o600)
         with os.fdopen(handle, "w") as file:
+            private_permissions(path)
             result = client.request("POST", "/invitations", {"email": email, "name": name})
             file.write(result["invite"] + "\n")
     except BaseException:
