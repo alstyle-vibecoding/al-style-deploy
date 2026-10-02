@@ -78,7 +78,7 @@ while read -r expected path extra; do
     case "$expected" in *[!a-f0-9]*) fail 'Invalid checksum.' ;; esac
     case "$path" in skills/al-style-deploy/*) relative=${path#skills/al-style-deploy/} ;; *) fail 'Unexpected manifest path.' ;; esac
     case "$relative" in
-        SKILL.md|scripts/alstyle.py|scripts/run.sh|scripts/run.ps1|scripts/install-from-github.sh|scripts/install-from-github.ps1|assets/toolchain.conf|assets/static.Dockerfile|references/setup.md|references/contract.md|references/install.md) ;;
+        SKILL.md|scripts/alstyle.py|scripts/run.sh|scripts/run.ps1|scripts/install-from-github.sh|scripts/install-from-github.ps1|assets/toolchain.conf|assets/static.Dockerfile|references/setup.md|references/contract.md|references/persistence.md|references/install.md) ;;
         *) fail 'File is outside the reviewed skill package.' ;;
     esac
     target="$stage/skill/$relative"
@@ -88,7 +88,7 @@ while read -r expected path extra; do
     [ "$(digest "$target")" = "$expected" ] || fail "Checksum mismatch: $relative. Existing skill was not changed."
     count=$((count + 1))
 done < "$stage/manifest"
-[ "$count" -eq 11 ] || fail 'Incomplete skill package.'
+[ "$count" -eq 12 ] || fail 'Incomplete skill package.'
 grep -q '^name: al-style-deploy$' "$stage/skill/SKILL.md" || fail 'Unexpected skill identity.'
 printf '%s\n' "$repository" "$revision" > "$stage/skill/.github-source"
 chmod 700 "$stage/skill/scripts/"*.sh

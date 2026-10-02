@@ -53,7 +53,7 @@ function Install-AlStyleSkill([string]$SelectedAgent, [string]$Target, [string]$
         $allowed = @('SKILL.md', 'scripts/alstyle.py', 'scripts/run.sh', 'scripts/run.ps1',
             'scripts/install-from-github.sh', 'scripts/install-from-github.ps1',
             'assets/toolchain.conf', 'assets/static.Dockerfile', 'references/setup.md',
-            'references/contract.md', 'references/install.md')
+            'references/contract.md', 'references/persistence.md', 'references/install.md')
         $seen = @{}
         foreach ($entry in (Get-Content -LiteralPath $manifestPath)) {
             if ($entry -cnotmatch '^([a-f0-9]{64})  skills/al-style-deploy/(.+)$') { throw 'Invalid file manifest.' }

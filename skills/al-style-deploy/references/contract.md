@@ -33,6 +33,8 @@ Available managed databases: `postgres`, `mariadb`, `redis`. The gateway generat
 
 Public health paths must return 2xx without login or redirects. The numeric non-root `user` must match directories and file ownership inside the image. Persistent storage uses named volumes; host bind mounts, host ports, host networking, Docker sockets, privileges and arbitrary Compose are unavailable.
 
+Read [persistent application data](persistence.md) to prepare data migration, upload volumes and survival checks. The gateway prevents deployment/rollback from removing or renaming an established database, changing its engine, or changing an established service/volume name or destination path. New databases/volumes and resource updates remain available. Planned storage changes require an explicit operator-coordinated migration.
+
 Current pilot quota: 768 MB RAM and 0.75 CPU per project, three projects per employee. Use `me` to read the actual server limits. Increasing limits requires operator configuration and sufficient worker capacity. Builds have a 25-minute runner timeout, a 50 MB source limit and a 1 GB compressed image limit.
 
 The admin block reports an existing admin URL. It does not provision a login by itself. Use the application's own administrator initialization, pass any bootstrap password as a secret, and verify login before reporting working administrator access.

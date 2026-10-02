@@ -2,12 +2,15 @@
 """Portable employee client. Dependencies: Python standard library and Git."""
 
 import argparse
+import contextlib
 import getpass
+import hashlib
 import json
 import os
 import pathlib
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -33,7 +36,7 @@ EXCLUDED = {
 }
 SENSITIVE = re.compile(
     r"(?:^|/)(?:\.env(?:\..+)?|id_(?:rsa|ed25519)|credentials(?:\.json)?|"
-    r"[^/]+\.(?:pem|key|p12|pfx|sqlite3?|db|dump|sql))$",
+    r"[^/]+\.(?:pem|key|p12|pfx|(?:sqlite3?|db)(?:-wal|-shm|-journal)?|dump|sql))$",
     re.I,
 )
 TOKENS = re.compile(
@@ -128,7 +131,152 @@ def run_git(root, *args, env=None, input=None):
     return output if "-z" in args else output.strip()
 
 
+def data_paths(root):
+    """Explicit runtime data paths, never patterns that hide arbitrary source files."""
+    plan = root / ".alstyle" / "storage.json"
+    if not plan.exists():
+        return []
+    if plan.is_symlink():
+        raise RuntimeError("Storage plan must be a regular file")
+    body = json.loads(plan.read_text())
+    if (
+        not isinstance(body, dict) or set(body) != {"schema_version", "data_paths"}
+        or body["schema_version"] != 1 or not isinstance(body["data_paths"], list)
+        or len(body["data_paths"]) > 20
+    ):
+        raise RuntimeError("Invalid .alstyle/storage.json")
+    paths = []
+    for value in body["data_paths"]:
+        if not isinstance(value, str) or not value or "\\" in value or "\x00" in value:
+            raise RuntimeError("Data paths must be relative project paths")
+        path = pathlib.PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts or not path.parts or path.parts[0] in {
+            ".git", ".alstyle", ".github", "Dockerfile", ".dockerignore", ".gitignore",
+        }:
+            raise RuntimeError("Data paths must not hide project configuration")
+        if not (root / value).resolve().is_relative_to(root):
+            raise RuntimeError("Data path escapes the project")
+        paths.append(path)
+    return paths
+
+
+def storage_inventory(root):
+    candidates = []
+    for directory, dirs, files in os.walk(root):
+        dirs[:] = [name for name in dirs if name not in EXCLUDED]
+        for name in dirs[:]:
+            path = pathlib.Path(directory) / name
+            if path.is_symlink():
+                dirs.remove(name)
+            elif name.lower() in {"uploads", "receipts", "media", "user-files", "attachments"}:
+                candidates.append({"path": path.relative_to(root).as_posix(), "kind": "uploads-directory"})
+                dirs.remove(name)
+        for name in files:
+            path = pathlib.Path(directory) / name
+            if not path.is_file() or path.is_symlink():
+                continue
+            kind = None
+            if path.suffix.lower() in {".db", ".sqlite", ".sqlite3"}:
+                kind = "file-database"
+            elif path.suffix.lower() in {".json", ".csv", ".jsonl"} and (
+                "data" in path.relative_to(root).parts or path.stem.lower() in {
+                    "drivers", "cards", "balances", "refuels", "fuel", "records", "history",
+                }
+            ):
+                kind = "possible-records"
+            if kind:
+                candidates.append({"path": path.relative_to(root).as_posix(), "kind": kind,
+                                   "bytes": path.stat().st_size})
+            if len(candidates) >= 100:
+                return {"candidates": candidates[:100], "truncated": True}
+    return {"candidates": candidates, "truncated": False}
+
+
+def stage_data(root, source):
+    """Make a private snapshot, without deleting data or putting it in a build context."""
+    root = root.resolve()
+    source = pathlib.Path(source).expanduser()
+    if not source.is_absolute():
+        source = root / source
+    if source.is_symlink():
+        raise RuntimeError("Data source must not be a symbolic link")
+    source = source.resolve()
+    if not source.is_relative_to(root) or source == root or not source.exists():
+        raise RuntimeError("Select an existing data file or directory inside the project")
+    if source.relative_to(root).parts[0] in EXCLUDED | {".alstyle", ".github"}:
+        raise RuntimeError("Select runtime data, not project or dependency directories")
+    state = state_directory().expanduser().resolve() / "private-data"
+    if state.is_relative_to(root):
+        raise RuntimeError("Private data storage must be outside the project")
+    files = [source] if source.is_file() else source.rglob("*")
+    total = 0
+    selected = []
+    for path in files:
+        if path.is_symlink() or not path.resolve().is_relative_to(source if source.is_dir() else root):
+            raise RuntimeError("Data snapshots cannot contain symbolic links")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise RuntimeError("Data snapshot contains a special file")
+        total += path.stat().st_size
+        selected.append(path)
+        if total > 1024**3 or len(selected) > 10000:
+            raise RuntimeError("Data snapshot exceeds 1 GB or 10000 files; prepare a bounded migration")
+    state.mkdir(parents=True, exist_ok=True)
+    private_permissions(state, directory=True)
+    directory = pathlib.Path(tempfile.mkdtemp(prefix="snapshot-", dir=state))
+    private_permissions(directory, directory=True)
+    payload = directory / "payload"
+    payload.mkdir()
+    private_permissions(payload, directory=True)
+    target = payload / source.name
+    try:
+        if source.is_dir():
+            target.mkdir()
+            private_permissions(target, directory=True)
+        inventory = []
+        for path in selected:
+            destination = target if source.is_file() else target / path.relative_to(source)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("rb") as file:
+                sqlite = file.read(16) == b"SQLite format 3\x00"
+            destination.touch(mode=0o600, exist_ok=False)
+            private_permissions(destination)
+            if sqlite:
+                deadline = time.monotonic() + 60
+                with contextlib.closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as original:
+                    page_size = original.execute("PRAGMA page_size").fetchone()[0]
+
+                    def progress(status, remaining, pages):
+                        if time.monotonic() > deadline:
+                            raise RuntimeError("SQLite snapshot timeout; stop writes and retry")
+                        if pages * page_size > 1024**3:
+                            raise RuntimeError("SQLite snapshot exceeds 1 GB; prepare a bounded migration")
+
+                    with contextlib.closing(sqlite3.connect(destination)) as backup:
+                        original.backup(backup, pages=256, progress=progress)
+            else:
+                before = path.stat()
+                shutil.copyfile(path, destination)
+                after = path.stat()
+                if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                    raise RuntimeError("Data changed during snapshot; stop writes and retry")
+            with destination.open("rb") as file:
+                checksum = hashlib.file_digest(file, "sha256").hexdigest()
+            inventory.append({"path": destination.relative_to(directory).as_posix(),
+                              "bytes": destination.stat().st_size, "sha256": checksum,
+                              "kind": "sqlite" if sqlite else "file"})
+        private_write(directory / "inventory.json", json.dumps(inventory, ensure_ascii=False))
+    except BaseException:
+        shutil.rmtree(directory)
+        raise
+    return {"snapshot_path": str(target), "inventory_file": str(directory / "inventory.json"),
+            "files": len(inventory), "bytes": sum(item["bytes"] for item in inventory),
+            "source_preserved": True}
+
+
 def source_files(root):
+    excluded_data = data_paths(root)
     git_root = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True
     )
@@ -148,6 +296,7 @@ def source_files(root):
         for p in files
         if not set(p.relative_to(root).parts) & EXCLUDED
         and p.relative_to(root).as_posix() != ".alstyle/project.json"
+        and not any(p.relative_to(root).is_relative_to(path) for path in excluded_data)
     )
 
 
@@ -488,6 +637,9 @@ def main():
     subs.add_parser("logout")
     subs.add_parser("me")
     subs.add_parser("projects")
+    stage_data_command = subs.add_parser("stage-data", help="Privately snapshot existing records and uploads")
+    stage_data_command.add_argument("--path", default=".")
+    stage_data_command.add_argument("--source", required=True)
     invite = subs.add_parser("invite", help="Issue an employee invitation using an approved operator account")
     invite.add_argument("--email", required=True)
     invite.add_argument("--name", required=True)
@@ -534,6 +686,9 @@ def main():
             item.add_argument("--service", default="web")
     args = parser.parse_args()
     root = pathlib.Path(getattr(args, "path", ".")).resolve()
+    if args.command == "stage-data":
+        print(json.dumps(stage_data(root, args.source), ensure_ascii=False, indent=2))
+        return
     if args.command == "stage-env":
         print(
             json.dumps(
@@ -562,6 +717,7 @@ def main():
                     "files": names[:120],
                     "manifest": (root / ".alstyle/deploy.json").exists(),
                     "project_mapped": (root / ".alstyle/project.json").is_file(),
+                    "storage": storage_inventory(root),
                 },
                 indent=2,
             )
