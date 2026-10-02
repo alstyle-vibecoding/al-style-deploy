@@ -1,6 +1,6 @@
 # Persistent application data
 
-Read this before the first publication and whenever an update changes storage. This is part of deployment preparation, not an optional add-on. Preserve the application's features and design; changing a file-based datastore to a managed database is authorized within this workflow.
+Read this before first publication and when updating an existing project. Reuse a completed, verified migration on later updates; never reimport/reset data just because the app is rebuilt. This is part of deployment preparation, not an optional add-on. Preserve the application's features and design; changing a file-based datastore to a managed database is authorized within this workflow.
 
 ## Find the actual data
 
@@ -33,7 +33,7 @@ An empty first volume does not migrate existing uploaded files for you. Prepare 
 
 Transfer the private snapshot directly to the application's authenticated HTTPS importer, with bounded requests and credentials read privately from a file. The gateway itself accepts configuration, not bulk application records. Convert SQLite/JSON/CSV using a project-specific importer into a transaction in PostgreSQL; repair sequences after preserving explicit IDs. Use an import ID/checksum and a durable completion ledger so retries do not duplicate records or overwrite a nonempty database. Copy attachments atomically into the configured volume, verify file hashes, then commit references; leave the source snapshot intact. On interruption resume the same import, not a fresh reset. The app should fail clearly if required initialization/import has not completed, not silently initialize sample data. Disable the bootstrap importer after completion; if it needs a configuration change, publish it while retaining the same storage names.
 
-For data already on the server's container layer, export/copy it before replacing that container. Do not deploy the new empty mount first. If the app offers no authorized export/import path, prepare one in the app or ask the operator for a scoped copy. Do not claim that existing data was migrated or proceed with replacement while the only copy is inaccessible. Do not attempt automatic destructive conversion of an unknown database format.
+For data already on the server's container layer, export/copy it before replacing that container. Do not deploy the new empty mount first. Use an existing authorized export path or ask the operator for a scoped snapshot of that application's data. Do not redeploy merely to add an export endpoint when the old container holds the only copy. Prepare the import path in the app only after that copy is secured. Do not claim that existing data was migrated or proceed with replacement while the only copy is inaccessible. Do not attempt automatic destructive conversion of an unknown database format.
 
 ## Prove preservation
 
