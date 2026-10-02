@@ -49,10 +49,22 @@ LITERAL = re.compile(
     rb"['\"]?\s*[:=]\s*['\"]([^'\"\r\n]{4,})['\"]"
 )
 CONNECTION_SECRET = re.compile(rb"(?i)\b(?:postgresql|postgres|mysql|mariadb|redis)://[^:/\s]+:([^@\s/]+)@")
+SQL_SECRET = re.compile(rb"(?i)\b(?:PASSWORD|IDENTIFIED\s+BY)\s+'([^'\r\n]{4,})'")
+SQL_DUMP = re.compile(
+    rb"(?is)PostgreSQL database dump|(?:MySQL|MariaDB) dump|Dumping data for table|"
+    rb"Data for Name:|\bCOPY\b[^;]*\bFROM\s+stdin\b|\bINSERT\s+INTO\b[^;]*\bVALUES\s*\("
+)
+
+
+def sql_migration(path):
+    parts = pathlib.PurePosixPath(path.lower()).parts
+    return path.lower().endswith(".sql") and any(
+        part in {"migrations", "migration", "schema-migrations"} for part in parts[:-1]
+    )
 
 
 def secret_literal(data):
-    for match in [*LITERAL.finditer(data), *CONNECTION_SECRET.finditer(data)]:
+    for match in [*LITERAL.finditer(data), *CONNECTION_SECRET.finditer(data), *SQL_SECRET.finditer(data)]:
         value = match.group(1).lower()
         if not value.startswith(
             (b"test-", b"test_", b"dummy-", b"dummy_", b"example-", b"example_", b"your_", b"<")
@@ -313,7 +325,7 @@ def scan(root):
         if not file.resolve().is_relative_to(root):
             issues.append(relative + ": symbolic link escapes project")
             continue
-        if SENSITIVE.search(relative) and not relative.endswith(
+        if SENSITIVE.search(relative) and not sql_migration(relative) and not relative.endswith(
             (".env.example", ".env.sample", ".env.template")
         ):
             issues.append(relative + ": sensitive filename")
@@ -323,8 +335,12 @@ def scan(root):
         total += size
         if size > 10 * 1024**2:
             issues.append(relative + ": file exceeds 10 MB")
-        elif TOKENS.search(file.read_bytes()) or secret_literal(file.read_bytes()):
-            issues.append(relative + ": credential pattern")
+        else:
+            data = file.read_bytes()
+            if relative.lower().endswith(".sql") and SQL_DUMP.search(data):
+                issues.append(relative + ": SQL data export; migrate records privately")
+            if TOKENS.search(data) or secret_literal(data):
+                issues.append(relative + ": credential pattern")
     if total > 50 * 1024**2:
         issues.append("Source exceeds 50 MB")
     if len(files) > 10000:
