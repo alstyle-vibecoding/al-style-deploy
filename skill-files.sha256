@@ -5,7 +5,7 @@ e5645835cd247ad9fc3ed005311684b8000871972a75c506acfac891147ef94a  skills/al-styl
 e16b2bb193e1c981b6506656970129d213deb8f709d94a75a5891cc631c8e87b  skills/al-style-deploy/references/install.md
 417766f7d866fac78bc370cd0ea4b58c6c2dedd3fcc8ed76f1019f7ba235fa0f  skills/al-style-deploy/references/persistence.md
 2c15bddbebcc6e4f789d686557625beb69524e41296ab872b12f7a25b27469da  skills/al-style-deploy/references/setup.md
-a88407bded7c9ad0e0bcd74b7bbbbc1d6324e2d5c005f01cf597112eba32a37b  skills/al-style-deploy/scripts/alstyle.py
+6c689aeece78e0bb8b299eaf2cde8794616dea983ea5faaf2b4f029a3654a855  skills/al-style-deploy/scripts/alstyle.py
 9248013b99ce6c230db2cdedaa98cadf79e39957af0ceb64e5c55613006e0b8d  skills/al-style-deploy/scripts/install-from-github.ps1
 8f304cf3c11d434ba99345adafdf151fb1254736d0674776609a01fc68f84e21  skills/al-style-deploy/scripts/install-from-github.sh
 7921c36b197a0c3e46b575bbf750981c0e88adb03f7e153cd51c324b6a15bffb  skills/al-style-deploy/scripts/run.ps1

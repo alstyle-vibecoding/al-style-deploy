@@ -31,7 +31,6 @@ EXCLUDED = {
     ".ruff_cache",
     "graphify-out",
     "dist",
-    "build",
     ".idea",
 }
 SENSITIVE = re.compile(
